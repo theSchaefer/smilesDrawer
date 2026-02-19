@@ -68,6 +68,11 @@ export default class SvgDrawer {
         // Set the canvas to the appropriate size
         this.svgWrapper.determineDimensions(preprocessor.graph.vertices);
 
+        // Draw polymer bracket (BigSMILES {..}n)
+        if (data && data.polymer && data.polymer.notation === 'BigSMILES') {
+            this.drawPolymerBracket(data.polymer);
+        }
+
         // Do the actual drawing
         this.drawAtomHighlights(preprocessor.opts.debug);
         this.drawEdges(preprocessor.opts.debug);
@@ -125,6 +130,22 @@ export default class SvgDrawer {
         this.svgWrapper.toCanvas(canvas, this.opts.width, this.opts.height);
         document.body.removeChild(svg);
         return target;
+    }
+
+    /**
+     * Draws polymer repeat-unit brackets for BigSMILES {..}n.
+     *
+     * @param {Object} polymer Polymer metadata.
+     */
+    drawPolymerBracket(polymer) {
+        let svgWrapper = this.svgWrapper;
+        // Use current drawing bounds and pad slightly
+        const pad = this.opts.bondLength * 0.6;
+        const x1 = svgWrapper.minX - pad;
+        const y1 = svgWrapper.minY - pad;
+        const x2 = svgWrapper.maxX + pad;
+        const y2 = svgWrapper.maxY + pad;
+        svgWrapper.drawPolymerBracket(x1, y1, x2, y2, polymer.repeat || 'n');
     }
 
     /**

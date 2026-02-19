@@ -1759,8 +1759,23 @@ export default (function () {
     }
   }
 
+  function parseWithPolymer(input, options) {
+    let s = (input || '').trim();
+    let m = s.match(/^\{([\s\S]+)\}n$/);
+    if (m) {
+      let tree = peg$parse(m[1], options);
+      tree.polymer = {
+        repeat: 'n',
+        notation: 'BigSMILES',
+        raw: s
+      };
+      return tree;
+    }
+    return peg$parse(input, options);
+  }
+
   return {
     SyntaxError: peg$SyntaxError,
-    parse: peg$parse
+    parse: parseWithPolymer
   };
 })();

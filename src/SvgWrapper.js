@@ -158,6 +158,56 @@ export default class SvgWrapper {
     }
 
     /**
+     * Draw polymer repeat-unit brackets with an "n" label.
+     * @param {Number} x1
+     * @param {Number} y1
+     * @param {Number} x2
+     * @param {Number} y2
+     * @param {String} label
+     */
+    drawPolymerBracket(x1, y1, x2, y2, label = 'n') {
+        const bracketSize = Math.max(6, this.opts.bondLength * 0.4);
+        const stroke = this.opts.bondThickness;
+        const color = this.themeManager.getColor('C');
+
+        const makeLine = (x1, y1, x2, y2) => {
+            let line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttributeNS(null, 'x1', x1);
+            line.setAttributeNS(null, 'y1', y1);
+            line.setAttributeNS(null, 'x2', x2);
+            line.setAttributeNS(null, 'y2', y2);
+            line.setAttributeNS(null, 'stroke', color);
+            line.setAttributeNS(null, 'stroke-width', stroke);
+            return line;
+        };
+
+        // Left bracket
+        this.backgroundItems.push(makeLine(x1, y1, x1, y2));
+        this.backgroundItems.push(makeLine(x1, y1, x1 + bracketSize, y1));
+        this.backgroundItems.push(makeLine(x1, y2, x1 + bracketSize, y2));
+
+        // Right bracket
+        this.backgroundItems.push(makeLine(x2, y1, x2, y2));
+        this.backgroundItems.push(makeLine(x2 - bracketSize, y1, x2, y1));
+        this.backgroundItems.push(makeLine(x2 - bracketSize, y2, x2, y2));
+
+        // Label (n)
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttributeNS(null, 'x', x2 + bracketSize * 0.3);
+        text.setAttributeNS(null, 'y', y2);
+        text.setAttributeNS(null, 'fill', color);
+        text.setAttributeNS(null, 'class', 'element');
+        text.textContent = label;
+        this.backgroundItems.push(text);
+
+        // Expand bounds to include brackets + label
+        this.minX = Math.min(this.minX, x1 - bracketSize * 0.2);
+        this.minY = Math.min(this.minY, y1 - bracketSize * 0.2);
+        this.maxX = Math.max(this.maxX, x2 + bracketSize * 1.5);
+        this.maxY = Math.max(this.maxY, y2 + bracketSize * 0.5);
+    }
+
+    /**
      * Create a linear gradient to apply to a line
      *
      * @param {Line} line the line to apply the gradiation to.
