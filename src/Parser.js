@@ -1759,11 +1759,73 @@ export default (function () {
     }
   }
 
+  function markPolymerChain(node) {
+    let current = node;
+    let first = true;
+    while (current) {
+      current._polymer = true;
+      if (first) {
+        current._polymerStart = true;
+        first = false;
+      }
+      if (!current.next) {
+        current._polymerEnd = true;
+      }
+      current = current.next;
+    }
+  }
+
+  function markPolymerExternal(node) {
+    // Mark immediate neighbors outside the polymer chain as external end groups
+    let current = node;
+    while (current) {
+      if (current._polymerStart && current.branchCount) {
+        // branch format: [bond, branchNode]
+        for (let i = 0; i < current.branches.length; i++) {
+          let b = current.branches[i];
+          if (b && b[1]) {
+            b[1]._polymerExternal = true;
+          }
+        }
+      }
+      if (current._polymerEnd && current.hasNext) {
+        // next is outside polymer chain
+        current.next._polymerExternal = true;
+      }
+      current = current.next;
+    }
+  }
+
   function parseWithPolymer(input, options) {
     let s = (input || '').trim();
-    let m = s.match(/^\{([\s\S]+)\}n$/);
+    // Allow optional external groups around the polymer: X{...}nY
+    let m = s.match(/^([^{}]*)\{([\s\S]+)\}n([^{}]*)$/);
     if (m) {
-      let tree = peg$parse(m[1], options);
+      let prefix = (m[1] || '').trim();
+      let core = m[2];
+      let suffix = (m[3] || '').trim();
+
+      let tree = peg$parse(core, options);
+      markPolymerChain(tree);
+
+      // Attach external groups as branches on start/end
+      if (prefix.length) {
+        let preTree = peg$parse(prefix, options);
+        preTree._polymerExternal = true;
+        if (!tree.branches) tree.branches = [];
+        tree.branches.push(['-', preTree]);
+      }
+
+      if (suffix.length) {
+        let end = tree;
+        while (end && end.next) end = end.next;
+        let postTree = peg$parse(suffix, options);
+        postTree._polymerExternal = true;
+        if (!end.branches) end.branches = [];
+        end.branches.push(['-', postTree]);
+      }
+
+      markPolymerExternal(tree);
       tree.polymer = {
         repeat: 'n',
         notation: 'BigSMILES',

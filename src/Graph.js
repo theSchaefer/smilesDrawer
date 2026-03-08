@@ -48,6 +48,10 @@ export default class Graph {
     // Create a new vertex object
         const element = node.atom.element ? node.atom.element : node.atom;
         let atom = new Atom(element, node.bond);
+        if (node._polymer) atom.polymer = true;
+        if (node._polymerStart) atom.polymerStart = true;
+        if (node._polymerEnd) atom.polymerEnd = true;
+        if (node._polymerExternal) atom.polymerExternal = true;
 
         if (element !== 'H' || (!node.hasNext && parentVertexId === null)) {
             atom.idx = this._atomIdx;

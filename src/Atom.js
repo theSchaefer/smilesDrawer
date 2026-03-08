@@ -73,6 +73,10 @@ export default class Atom {
         this.subtreeDepth = 1;
         this.hasHydrogen = false;
         this.class = undefined;
+        this.polymer = false;
+        this.polymerStart = false;
+        this.polymerEnd = false;
+        this.polymerExternal = false;
     }
 
     /**

@@ -3371,6 +3371,10 @@
       this.subtreeDepth = 1;
       this.hasHydrogen = false;
       this.class = void 0;
+      this.polymer = false;
+      this.polymerStart = false;
+      this.polymerEnd = false;
+      this.polymerExternal = false;
     }
     /**
      * Adds a neighbouring element to this atom.
@@ -5953,6 +5957,10 @@
     _init(node, order = 0, parentVertexId = null, isBranch = false) {
       const element = node.atom.element ? node.atom.element : node.atom;
       let atom = new Atom(element, node.bond);
+      if (node._polymer) atom.polymer = true;
+      if (node._polymerStart) atom.polymerStart = true;
+      if (node._polymerEnd) atom.polymerEnd = true;
+      if (node._polymerExternal) atom.polymerExternal = true;
       if (element !== "H" || !node.hasNext && parentVertexId === null) {
         atom.idx = this._atomIdx;
         this._atomIdx++;
@@ -9838,19 +9846,19 @@
         line.setAttributeNS(null, "stroke-width", stroke);
         return line;
       };
-      this.backgroundItems.push(makeLine(x1, y1, x1, y2));
-      this.backgroundItems.push(makeLine(x1, y1, x1 + bracketSize, y1));
-      this.backgroundItems.push(makeLine(x1, y2, x1 + bracketSize, y2));
-      this.backgroundItems.push(makeLine(x2, y1, x2, y2));
-      this.backgroundItems.push(makeLine(x2 - bracketSize, y1, x2, y1));
-      this.backgroundItems.push(makeLine(x2 - bracketSize, y2, x2, y2));
+      this.highlights.push(makeLine(x1, y1, x1, y2));
+      this.highlights.push(makeLine(x1, y1, x1 + bracketSize, y1));
+      this.highlights.push(makeLine(x1, y2, x1 + bracketSize, y2));
+      this.highlights.push(makeLine(x2, y1, x2, y2));
+      this.highlights.push(makeLine(x2 - bracketSize, y1, x2, y1));
+      this.highlights.push(makeLine(x2 - bracketSize, y2, x2, y2));
       const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
       text.setAttributeNS(null, "x", x2 + bracketSize * 0.3);
-      text.setAttributeNS(null, "y", y2);
+      text.setAttributeNS(null, "y", y1 + bracketSize * 0.2);
       text.setAttributeNS(null, "fill", color);
       text.setAttributeNS(null, "class", "element");
       text.textContent = label;
-      this.backgroundItems.push(text);
+      this.highlights.push(text);
       this.minX = Math.min(this.minX, x1 - bracketSize * 0.2);
       this.minY = Math.min(this.minY, y1 - bracketSize * 0.2);
       this.maxX = Math.max(this.maxX, x2 + bracketSize * 1.5);
@@ -10597,11 +10605,105 @@
      */
     drawPolymerBracket(polymer) {
       let svgWrapper = this.svgWrapper;
-      const pad = this.opts.bondLength * 0.6;
-      const x1 = svgWrapper.minX - pad;
-      const y1 = svgWrapper.minY - pad;
-      const x2 = svgWrapper.maxX + pad;
-      const y2 = svgWrapper.maxY + pad;
+      let graph = this.preprocessor.graph;
+      let minX = Number.POSITIVE_INFINITY;
+      let minY = Number.POSITIVE_INFINITY;
+      let maxX = Number.NEGATIVE_INFINITY;
+      let maxY = Number.NEGATIVE_INFINITY;
+      const startIds = [];
+      for (let i = 0; i < graph.vertices.length; i++) {
+        let vertex = graph.vertices[i];
+        let atom = vertex.value;
+        if (atom && atom.polymer) startIds.push(vertex.id);
+      }
+      if (startIds.length > 0) {
+        const visited = /* @__PURE__ */ new Set();
+        const queue = startIds.slice();
+        for (const id of queue) visited.add(id);
+        while (queue.length) {
+          const vid = queue.shift();
+          const edgeIds = graph.getEdges(vid);
+          for (let i = 0; i < edgeIds.length; i++) {
+            const edge = graph.edges[edgeIds[i]];
+            const nid = edge.sourceId === vid ? edge.targetId : edge.sourceId;
+            if (!visited.has(nid)) {
+              visited.add(nid);
+              queue.push(nid);
+            }
+          }
+        }
+        for (const vid of visited) {
+          let vertex = graph.vertices[vid];
+          let atom = vertex.value;
+          if (!atom || !atom.isDrawn) continue;
+          let p = vertex.position;
+          if (p.x < minX) minX = p.x;
+          if (p.y < minY) minY = p.y;
+          if (p.x > maxX) maxX = p.x;
+          if (p.y > maxY) maxY = p.y;
+        }
+      } else {
+        minX = svgWrapper.minX;
+        minY = svgWrapper.minY;
+        maxX = svgWrapper.maxX;
+        maxY = svgWrapper.maxY;
+      }
+      let leftX = null;
+      let rightX = null;
+      let startVertex = null;
+      let endVertex = null;
+      let startExternal = null;
+      let endExternal = null;
+      for (let i = 0; i < graph.vertices.length; i++) {
+        let vertex = graph.vertices[i];
+        let atom = vertex.value;
+        if (!atom || !atom.isDrawn) continue;
+        if (atom.polymerStart) startVertex = vertex;
+        if (atom.polymerEnd) endVertex = vertex;
+        if (atom.polymerExternal) {
+          if (!startExternal) startExternal = vertex;
+          else endExternal = vertex;
+        }
+      }
+      const padX = this.opts.bondLength * 0.5;
+      const padY = this.opts.bondLength * 0.6;
+      const directionFromVertex = (v) => {
+        if (!v) return null;
+        let neighbor = null;
+        for (let i = 0; i < v.neighbours.length; i++) {
+          let n = graph.vertices[v.neighbours[i]];
+          if (n && n.value && n.value.polymer) {
+            neighbor = n;
+            break;
+          }
+        }
+        if (!neighbor) return null;
+        let dx = v.position.x - neighbor.position.x;
+        let dy = v.position.y - neighbor.position.y;
+        let len = Math.sqrt(dx * dx + dy * dy) || 1;
+        return { dx: dx / len, dy: dy / len };
+      };
+      const startDir = directionFromVertex(startVertex);
+      const endDir = directionFromVertex(endVertex);
+      leftX = Math.min(minX - padX, startVertex ? startVertex.position.x - padX : minX - padX);
+      rightX = Math.max(maxX + padX, endVertex ? endVertex.position.x + padX : maxX + padX);
+      const anchorFromExternal = (polyV, extV) => {
+        if (!polyV || !extV) return null;
+        return (polyV.position.x + extV.position.x) / 2;
+      };
+      const extLeft = anchorFromExternal(startVertex, startExternal);
+      const extRight = anchorFromExternal(endVertex, endExternal);
+      if (extLeft !== null) leftX = extLeft;
+      if (extRight !== null) rightX = extRight;
+      if (leftX > rightX) {
+        const tmp = leftX;
+        leftX = rightX;
+        rightX = tmp;
+      }
+      const x1 = leftX;
+      const y1 = minY - padY;
+      const x2 = rightX;
+      const y2 = maxY + padY;
       svgWrapper.drawPolymerBracket(x1, y1, x2, y2, polymer.repeat || "n");
     }
     /**
@@ -12442,11 +12544,62 @@
         );
       }
     }
+    function markPolymerChain(node) {
+      let current = node;
+      let first = true;
+      while (current) {
+        current._polymer = true;
+        if (first) {
+          current._polymerStart = true;
+          first = false;
+        }
+        if (!current.next) {
+          current._polymerEnd = true;
+        }
+        current = current.next;
+      }
+    }
+    function markPolymerExternal(node) {
+      let current = node;
+      while (current) {
+        if (current._polymerStart && current.branchCount) {
+          for (let i = 0; i < current.branches.length; i++) {
+            let b = current.branches[i];
+            if (b && b[1]) {
+              b[1]._polymerExternal = true;
+            }
+          }
+        }
+        if (current._polymerEnd && current.hasNext) {
+          current.next._polymerExternal = true;
+        }
+        current = current.next;
+      }
+    }
     function parseWithPolymer(input, options) {
       let s = (input || "").trim();
-      let m = s.match(/^\{([\s\S]+)\}n$/);
+      let m = s.match(/^([^{}]*)\{([\s\S]+)\}n([^{}]*)$/);
       if (m) {
-        let tree = peg$parse(m[1], options);
+        let prefix = (m[1] || "").trim();
+        let core = m[2];
+        let suffix = (m[3] || "").trim();
+        let tree = peg$parse(core, options);
+        markPolymerChain(tree);
+        if (prefix.length) {
+          let preTree = peg$parse(prefix, options);
+          preTree._polymerExternal = true;
+          if (!tree.branches) tree.branches = [];
+          tree.branches.push(["-", preTree]);
+        }
+        if (suffix.length) {
+          let end = tree;
+          while (end && end.next) end = end.next;
+          let postTree = peg$parse(suffix, options);
+          postTree._polymerExternal = true;
+          if (!end.branches) end.branches = [];
+          end.branches.push(["-", postTree]);
+        }
+        markPolymerExternal(tree);
         tree.polymer = {
           repeat: "n",
           notation: "BigSMILES",

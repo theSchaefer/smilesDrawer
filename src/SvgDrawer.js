@@ -139,12 +139,117 @@ export default class SvgDrawer {
      */
     drawPolymerBracket(polymer) {
         let svgWrapper = this.svgWrapper;
-        // Use current drawing bounds and pad slightly
-        const pad = this.opts.bondLength * 0.6;
-        const x1 = svgWrapper.minX - pad;
-        const y1 = svgWrapper.minY - pad;
-        const x2 = svgWrapper.maxX + pad;
-        const y2 = svgWrapper.maxY + pad;
+        let graph = this.preprocessor.graph;
+
+        // Compute bounds from polymer-flagged vertices and all attached subtrees
+        let minX = Number.POSITIVE_INFINITY;
+        let minY = Number.POSITIVE_INFINITY;
+        let maxX = Number.NEGATIVE_INFINITY;
+        let maxY = Number.NEGATIVE_INFINITY;
+
+        const startIds = [];
+        for (let i = 0; i < graph.vertices.length; i++) {
+            let vertex = graph.vertices[i];
+            let atom = vertex.value;
+            if (atom && atom.polymer) startIds.push(vertex.id);
+        }
+
+        if (startIds.length > 0) {
+            // BFS to include all atoms connected to the repeat unit (pendant groups)
+            const visited = new Set();
+            const queue = startIds.slice();
+            for (const id of queue) visited.add(id);
+
+            while (queue.length) {
+                const vid = queue.shift();
+                const edgeIds = graph.getEdges(vid);
+                for (let i = 0; i < edgeIds.length; i++) {
+                    const edge = graph.edges[edgeIds[i]];
+                    const nid = edge.sourceId === vid ? edge.targetId : edge.sourceId;
+                    if (visited.has(nid)) continue;
+                    const nVertex = graph.vertices[nid];
+                    if (nVertex && nVertex.value && nVertex.value.polymerExternal) {
+                        continue; // skip external end groups
+                    }
+                    visited.add(nid);
+                    queue.push(nid);
+                }
+            }
+
+            for (const vid of visited) {
+                let vertex = graph.vertices[vid];
+                let atom = vertex.value;
+                if (!atom || !atom.isDrawn) continue;
+                let p = vertex.position;
+                if (p.x < minX) minX = p.x;
+                if (p.y < minY) minY = p.y;
+                if (p.x > maxX) maxX = p.x;
+                if (p.y > maxY) maxY = p.y;
+            }
+        } else {
+            // Fallback to full drawing bounds if polymer bounds missing
+            minX = svgWrapper.minX;
+            minY = svgWrapper.minY;
+            maxX = svgWrapper.maxX;
+            maxY = svgWrapper.maxY;
+        }
+
+        // Determine anchor points based on bonds leaving the repeat unit
+        let leftX = null;
+        let rightX = null;
+        let startVertex = null;
+        let endVertex = null;
+        let startExternal = null;
+        let endExternal = null;
+
+        for (let i = 0; i < graph.vertices.length; i++) {
+            let vertex = graph.vertices[i];
+            let atom = vertex.value;
+            if (!atom || !atom.isDrawn) continue;
+            if (atom.polymerStart) startVertex = vertex;
+            if (atom.polymerEnd) endVertex = vertex;
+            if (atom.polymerExternal) {
+                // guess external is connected to start or end by proximity
+                if (!startExternal) startExternal = vertex;
+                else endExternal = vertex;
+            }
+        }
+
+        const padX = this.opts.bondLength * 0.5;
+        const padY = this.opts.bondLength * 0.6;
+
+        const directionFromVertex = (v) => {
+            if (!v) return null;
+            // find a neighbor along the polymer backbone (polymer==true)
+            let neighbor = null;
+            for (let i = 0; i < v.neighbours.length; i++) {
+                let n = graph.vertices[v.neighbours[i]];
+                if (n && n.value && n.value.polymer) { neighbor = n; break; }
+            }
+            if (!neighbor) return null;
+            let dx = v.position.x - neighbor.position.x;
+            let dy = v.position.y - neighbor.position.y;
+            let len = Math.sqrt(dx*dx + dy*dy) || 1;
+            return {dx: dx/len, dy: dy/len};
+        };
+
+        const startDir = directionFromVertex(startVertex);
+        const endDir = directionFromVertex(endVertex);
+
+        // Base bracket positions to include all pendant groups
+        leftX = Math.min(minX - padX, startVertex ? startVertex.position.x - padX : minX - padX);
+        rightX = Math.max(maxX + padX, endVertex ? endVertex.position.x + padX : maxX + padX);
+
+        // Ensure left < right
+        if (leftX > rightX) {
+            const tmp = leftX; leftX = rightX; rightX = tmp;
+        }
+
+        const x1 = leftX;
+        const y1 = minY - padY;
+        const x2 = rightX;
+        const y2 = maxY + padY;
+
         svgWrapper.drawPolymerBracket(x1, y1, x2, y2, polymer.repeat || 'n');
     }
 

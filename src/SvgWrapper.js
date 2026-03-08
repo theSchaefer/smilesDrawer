@@ -182,23 +182,24 @@ export default class SvgWrapper {
         };
 
         // Left bracket
-        this.backgroundItems.push(makeLine(x1, y1, x1, y2));
-        this.backgroundItems.push(makeLine(x1, y1, x1 + bracketSize, y1));
-        this.backgroundItems.push(makeLine(x1, y2, x1 + bracketSize, y2));
+        this.highlights.push(makeLine(x1, y1, x1, y2));
+        this.highlights.push(makeLine(x1, y1, x1 + bracketSize, y1));
+        this.highlights.push(makeLine(x1, y2, x1 + bracketSize, y2));
 
         // Right bracket
-        this.backgroundItems.push(makeLine(x2, y1, x2, y2));
-        this.backgroundItems.push(makeLine(x2 - bracketSize, y1, x2, y1));
-        this.backgroundItems.push(makeLine(x2 - bracketSize, y2, x2, y2));
+        this.highlights.push(makeLine(x2, y1, x2, y2));
+        this.highlights.push(makeLine(x2 - bracketSize, y1, x2, y1));
+        this.highlights.push(makeLine(x2 - bracketSize, y2, x2, y2));
 
         // Label (n)
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         text.setAttributeNS(null, 'x', x2 + bracketSize * 0.3);
-        text.setAttributeNS(null, 'y', y2);
+        // place slightly above top-right (upper-right), similar to [repeat]n
+        text.setAttributeNS(null, 'y', y1 + bracketSize * 0.2);
         text.setAttributeNS(null, 'fill', color);
         text.setAttributeNS(null, 'class', 'element');
         text.textContent = label;
-        this.backgroundItems.push(text);
+        this.highlights.push(text);
 
         // Expand bounds to include brackets + label
         this.minX = Math.min(this.minX, x1 - bracketSize * 0.2);
